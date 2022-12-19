@@ -1,0 +1,46 @@
+name: Publish library
+description: Publish a npm library into the GitHub registry
+
+inputs:
+  github-token:
+    description: The token to authenticate in a workflow run.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v2
+
+    - uses: actions/setup-node@v2
+      with:
+        node-version: 16
+        cache: npm
+        registry-url: https://npm.pkg.github.com
+        scope: "@agusmgarcia"
+
+    - run: npm ci --ignore-scripts
+      shell: bash
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.github-token }}
+
+    - run: npm run lint
+      shell: bash
+
+    - uses: frabert/replace-string-action@v2.3
+      id: get-version-from-tag
+      with:
+        pattern: v(.*)
+        string: ${{ github.ref_name }}
+        replace-with: $1
+
+    - uses: actions/create-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Version ${{ steps.get-version-from-tag.outputs.replaced }}
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+    - run: npm publish
+      shell: bash
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.github-token }}
