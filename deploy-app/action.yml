@@ -1,0 +1,56 @@
+name: Deploy application
+description: Deploy an application into Google firebase
+
+inputs:
+  firebase-token:
+    description: Required if GCP_SA_KEY is not set. The token to use for authentication. This token can be aquired through the firebase login:ci command.
+    required: true
+
+  github-token:
+    description: The token to authenticate in a workflow run.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v2
+
+    - uses: actions/setup-node@v2
+      with:
+        node-version: 16
+        cache: npm
+        registry-url: https://npm.pkg.github.com
+        scope: "@agusmgarcia"
+
+    - run: npm ci --ignore-scripts
+      shell: bash
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.github-token }}
+
+    - run: npm run lint
+      shell: bash
+
+    - uses: frabert/replace-string-action@v2.3
+      id: get-version-from-tag
+      with:
+        pattern: v(.*)
+        string: ${{ github.ref_name }}
+        replace-with: $1
+
+    - run: npm run build
+      shell: bash
+      env:
+        NEXT_PUBLIC_APP_VERSION: ${{ steps.get-version-from-tag.outputs.replaced }}
+
+    - uses: actions/create-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Version ${{ steps.get-version-from-tag.outputs.replaced }}
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+    - uses: w9jds/firebase-action@v2.1.2
+      with:
+        args: deploy
+      env:
+        FIREBASE_TOKEN: ${{ inputs.firebase-token }}
